@@ -7,6 +7,9 @@ type PutAppendArgs struct {
 	// You'll have to add definitions here.
 	// Field names must start with capital letters,
 	// otherwise RPC will break.
+	// need to know which client sends which message
+	Seq int
+	Id  int64
 }
 
 type PutAppendReply struct {

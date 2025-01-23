@@ -1,13 +1,24 @@
 package kvsrv
 
-import "6.5840/labrpc"
-import "crypto/rand"
-import "math/big"
+import (
+	"crypto/rand"
+	"math/big"
+	"time"
 
+	"6.5840/labrpc"
+)
 
 type Clerk struct {
 	server *labrpc.ClientEnd
 	// You will have to modify this struct.
+	// client id
+	id int64
+	// client sending sequence
+	seq int
+	// wait for lost message
+	sendTimeout time.Duration
+	// time gap between sending consecutive requests
+	nextWait time.Duration
 }
 
 func nrand() int64 {
@@ -21,6 +32,11 @@ func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 	ck := new(Clerk)
 	ck.server = server
 	// You'll have to add code here.
+	// initialization
+	ck.id = nrand()
+	ck.seq = 0
+	ck.nextWait = 50 * time.Millisecond
+	ck.sendTimeout = 500 * time.Millisecond
 	return ck
 }
 
@@ -37,7 +53,27 @@ func MakeClerk(server *labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 
 	// You will have to modify this function.
-	return ""
+	args := GetArgs{
+		Key: key,
+	}
+
+	reply := GetReply{}
+
+	for {
+		select {
+		case <-time.After(ck.sendTimeout):
+			{
+				// lost
+				return ""
+			}
+		default:
+			ok := ck.server.Call("KVServer.Get", &args, &reply)
+			if ok {
+				return reply.Value
+			}
+			time.Sleep(ck.nextWait)
+		}
+	}
 }
 
 // shared by Put and Append.
@@ -50,7 +86,31 @@ func (ck *Clerk) Get(key string) string {
 // arguments. and reply must be passed as a pointer.
 func (ck *Clerk) PutAppend(key string, value string, op string) string {
 	// You will have to modify this function.
-	return ""
+	args := PutAppendArgs{
+		Key:   key,
+		Value: value,
+		Seq:   ck.seq,
+		Id:    ck.id,
+	}
+
+	reply := PutAppendReply{}
+
+	for {
+		select {
+		case <-time.After(ck.sendTimeout):
+			{
+				return ""
+			}
+		default:
+			ok := ck.server.Call("KVServer."+op, &args, &reply)
+			if ok {
+				// increase sequence if succussfully gets reply
+				ck.seq++
+				return reply.Value
+			}
+			time.Sleep(ck.nextWait)
+		}
+	}
 }
 
 func (ck *Clerk) Put(key string, value string) {
